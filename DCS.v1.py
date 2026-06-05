@@ -97,6 +97,25 @@ if starting:
 			elif self.value < 0:
 				self.value = min(0, self.value + self.decay)
 
+	class VirtualButton:
+		def __init__(self):
+			self.pressed = False
+			self.released = False
+			self.pressed_since = 0
+
+		def update(self, pressed = False):
+			if self.released:
+				self.released = False
+				# self.pressed_since = 0
+
+			if pressed and not self.pressed:
+				self.pressed_since = tick
+			elif not pressed and self.pressed:
+				# self.pressed_since = 0
+				self.released = True
+
+			self.pressed = pressed
+
 	class DCSProfile(object):
 		def __init__(self):
 			self.axis = []
@@ -133,6 +152,9 @@ if starting:
 			self.was_mouse5_pressed = False
 			self.hold_mouse5_until = 0
 
+			self.mouse5 = VirtualButton()
+			self.f = VirtualButton()
+
 		def setup(self):
 			self.axis_pitch = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15)
 			self.axis_roll = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15, trim_value=0.0)
@@ -162,21 +184,32 @@ if starting:
 			deltaX = mouse.deltaX
 			deltaY = mouse.deltaY
 
-			if not freelook:
-				# Sticky mouse 5
-				mouse5_pressed = mouse.getButton(4) or tick < self.hold_mouse5_until
-				if mouse.getButton(4): # mouse5_pressed and not self.was_mouse5_pressed:
-					self.hold_mouse5_until = tick + 50 # 1000ms
-				self.was_mouse5_pressed = mouse5_pressed
+			self.mouse5.update(pressed = (mouse.getButton(4) and not freelook))
+			self.f.update(pressed = (layer_keys[Key.F].was_layer_pressed(0) and not freelook))
 
+			if not freelook:
+				trim_pressed = tick < self.mouse5.pressed_since + 50 or self.mouse5.pressed # 1000ms after release
+
+				f_held = False
+				f_pressed = False
+				shift_f_pressed = False
+
+				if shift_pressed:
+					shift_f_pressed = self.f.released
+				else:
+					f_held = self.f.pressed and tick > self.f.pressed_since + 25
+					f_pressed = self.f.released and tick < self.f.pressed_since + 25
+	
 				# mouse axis
 				if control_mode == 1:
-					self.axis_pitch.set_trim(0 if mouse5_pressed else None)
+					self.axis_pitch.set_trim(0 if trim_pressed else None)
+					if f_held:
+						self.axis_roll.set_trim(self.axis_roll.value)
 					self.axis_roll.move(deltaX)
 					self.axis_pitch.move(-deltaY)
 				elif control_mode == 2:
 					self.axis_pitch.set_trim(0)
-					self.axis_pedal.set_trim(0 if mouse5_pressed else None)
+					self.axis_pedal.set_trim(0 if trim_pressed else None)
 					self.axis_pedal.move(deltaX / 50)
 
 
@@ -215,11 +248,16 @@ if starting:
 					else:
 						self.axis_pedal.offset_trim(self.axis_pedal.sensitivity * self.pedal_speed.value)
 						self.pedal_speed.move(1)
-				if layer_keys[Key.F].was_layer_pressed(0):
-					if shift_pressed:
-						self.axis_roll.set_trim(0)
-					else:
-						self.axis_pedal.set_trim(0)
+				if shift_f_pressed:
+					self.axis_roll.set_trim(0)
+				elif f_pressed:
+					self.axis_pedal.set_trim(0)
+				
+				# if layer_keys[Key.F].was_layer_pressed(0):
+				# 	if shift_pressed:
+				# 		self.axis_roll.set_trim(0)
+				# 	else:
+				# 		self.axis_pedal.set_trim(0)
 
 			self.axis_zoom_out.trim_value = self.axis_zoom.value
 
