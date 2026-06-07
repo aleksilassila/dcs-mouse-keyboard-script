@@ -67,6 +67,63 @@ if starting:
 				self.move(0)
 			self.did_move = False
 
+	class VirtualJoystick:
+		def __init__(self):
+			self.value_x = 0
+			self.value_y = 0
+
+			self.axis_x = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15, trim_value=0.0)
+			self.axis_y = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15)
+
+			# self.centered_axis_x = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15, trim_value=0.0)
+			self.centered_axis_y = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15, trim_value=0.0)
+
+			self.lerp_ticks = 25
+			self.cumulative_delta_threshold = 25
+
+			self.lerp_tick = 0
+			self.cumulative_delta = 0
+
+			self.was_centered = False
+
+		def update(self, deltaX, deltaY, centered=False):
+			centered = centered or (self.cumulative_delta < self.cumulative_delta_threshold and (abs(self.value_x) > 1 or abs(self.value_y) > 1))
+
+			# On center press
+			if centered and not self.was_centered:
+				self.lerp_tick = tick
+				self.cumulative_delta = 0
+				# self.centered_axis_x.set_val(0)
+				self.centered_axis_y.set_val(0)
+
+			# On center release
+			if self.was_centered and not centered:
+				# self.axis_x.set_val(self.value_x)
+				self.axis_y.set_val(self.value_y)
+
+			if centered:
+				self.cumulative_delta += abs(deltaX) + abs(deltaY)
+				# self.centered_axis_x.move(deltaX)
+				self.centered_axis_y.move(deltaY)
+			else:
+				# self.axis_x.move(deltaX)
+				self.axis_y.move(deltaY)
+
+			self.axis_x.move(deltaX)
+
+			lerp_progress = min(1, (tick - self.lerp_tick) / float(self.lerp_ticks)) if centered else 0
+			# self.value_x = self.centered_axis_x.value * lerp_progress + self.axis_x.value * (1 - lerp_progress)
+			self.value_x = self.axis_x.value
+			self.value_y = self.centered_axis_y.value * lerp_progress + self.axis_y.value * (1 - lerp_progress)
+
+			self.was_centered = centered
+
+		def post_update(self):
+			self.axis_x.post_update()
+			self.axis_y.post_update()
+			# self.centered_axis_x.post_update()
+			self.centered_axis_y.post_update()
+
 	class VirtualButtonAxis:
 		def __init__(self, decay=1, max_val=15):
 			self.decay = decay
@@ -156,8 +213,9 @@ if starting:
 			self.f = VirtualButton()
 
 		def setup(self):
-			self.axis_pitch = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15)
-			self.axis_roll = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15, trim_value=0.0)
+			# self.axis_pitch = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15)
+			# self.axis_roll = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15, trim_value=0.0)
+			self.joystick = VirtualJoystick()
 			
 			self.pedal_speed = VirtualAxis(1.0, sensitivity=0.1, constant_rate=0.1)
 			self.axis_pedal = VirtualAxis(axis_max, sensitivity=200, linear_rate=0.015, constant_rate=20)
@@ -178,7 +236,7 @@ if starting:
 			# self.axis_manual_zoom = VirtualButtonAxis(decay=20, max_val=1000)
 			self.axis_manual_zoom = VirtualAxis(axis_max, sensitivity=20)
 			
-			self.axis = [self.axis_roll, self.axis_pitch, self.pedal_speed, self.axis_pedal, self.axis_throttle, self.axis_brake_left, self.axis_brake_right, self.axis_zoom, self.axis_zoom_out, self.axis_manual_zoom]
+			self.axis = [self.joystick, self.pedal_speed, self.axis_pedal, self.axis_throttle, self.axis_brake_left, self.axis_brake_right, self.axis_zoom, self.axis_zoom_out, self.axis_manual_zoom]
 
 		def update(self, freelook=False, control_layer=False, alt_pressed=False, shift_pressed=False, control_mode=1, active_layer_offset=0):
 			deltaX = mouse.deltaX
@@ -187,8 +245,11 @@ if starting:
 			self.mouse5.update(pressed = (mouse.getButton(4) and not freelook))
 			self.f.update(pressed = (layer_keys[Key.F].was_layer_pressed(0) and not freelook))
 
+			self.joystick.update(deltaX if (control_mode == 1 and not freelook) else 0, deltaY if (control_mode == 1 and not freelook) else 0, centered=((mouse.getButton(4) or control_mode == 2) and not freelook))
+
 			if not freelook:
-				trim_pressed = tick < self.mouse5.pressed_since + 50 or self.mouse5.pressed # 1000ms after release
+				# trim_pressed = tick < self.mouse5.pressed_since + 50 or self.mouse5.pressed # 1000ms after release
+				trim_pressed = mouse.getButton(4) and not freelook
 
 				f_held = False
 				f_pressed = False
@@ -202,13 +263,15 @@ if starting:
 	
 				# mouse axis
 				if control_mode == 1:
-					self.axis_pitch.set_trim(0 if trim_pressed else None)
+					# self.axis_pitch.set_trim(0 if trim_pressed else None)
 					if f_held:
-						self.axis_roll.set_trim(self.axis_roll.value)
-					self.axis_roll.move(deltaX)
-					self.axis_pitch.move(-deltaY)
+						# self.axis_roll.set_trim(self.axis_roll.value)
+						self.joystick.axis_x.set_trim(self.joystick.axis_x.value)
+					# self.axis_roll.move(deltaX)
+					# self.axis_pitch.move(-deltaY)
+					pass
 				elif control_mode == 2:
-					self.axis_pitch.set_trim(0)
+					# self.axis_pitch.set_trim(0)
 					self.axis_pedal.set_trim(0 if trim_pressed else None)
 					self.axis_pedal.move(deltaX / 50)
 
@@ -238,18 +301,21 @@ if starting:
 				
 				if layer_keys[Key.A].was_layer_pressed(0):
 					if shift_pressed:
-						self.axis_roll.offset_trim(-10)
+						# self.axis_roll.offset_trim(-10)
+						self.joystick.axis_x.offset_trim(-10)
 					else:
 						self.axis_pedal.offset_trim(-self.axis_pedal.sensitivity * self.pedal_speed.value)
 						self.pedal_speed.move(1)
 				if layer_keys[Key.D].was_layer_pressed(0):
 					if shift_pressed:
-						self.axis_roll.offset_trim(10)
+						# self.axis_roll.offset_trim(10)
+						self.joystick.axis_x.offset_trim(10)
 					else:
 						self.axis_pedal.offset_trim(self.axis_pedal.sensitivity * self.pedal_speed.value)
 						self.pedal_speed.move(1)
 				if shift_f_pressed:
-					self.axis_roll.set_trim(0)
+					# self.axis_roll.set_trim(0)
+					self.joystick.axis_x.set_trim(0)
 				elif f_pressed:
 					self.axis_pedal.set_trim(0)
 				
@@ -262,8 +328,11 @@ if starting:
 			self.axis_zoom_out.trim_value = self.axis_zoom.value
 
 			# vJoy axis mapping
-			vJoy[0].x = self.axis_roll.value
-			vJoy[0].y = self.axis_pitch.value
+			# vJoy[0].x = self.axis_roll.value
+			# vJoy[0].y = self.axis_pitch.value
+			vJoy[0].x = self.joystick.value_x
+			# vJoy[0].y = linear_map(self.joystick.value_y, 0, axis_max, axis_max / 2.5, axis_max) if self.joystick.value_y >= 0 else linear_map(self.joystick.value_y, -axis_max, 0, -axis_max, axis_max / 2.5)
+			vJoy[0].y = linear_map(self.joystick.value_y, 0, axis_max, axis_max / 1.93, axis_max) if self.joystick.value_y >= 0 else linear_map(self.joystick.value_y, -axis_max, 0, -axis_max, axis_max / 1.93)
 			vJoy[0].z = self.axis_throttle.value
 			vJoy[0].rx = self.axis_brake_left.value
 			vJoy[0].ry = self.axis_brake_right.value
@@ -279,8 +348,8 @@ if starting:
 			# diagnostics.watch(self.axis_manual_zoom.decrement)
 
 			diagnostics.watch(vJoy[0].slider)
-			diagnostics.watch(self.axis_pitch.value)
-			diagnostics.watch(self.axis_pitch.trim_value)
+			# diagnostics.watch(self.axis_pitch.value)
+			# diagnostics.watch(self.axis_pitch.trim_value)
 			diagnostics.watch(self.pedal_speed.value)
 
 			self.post_update()
