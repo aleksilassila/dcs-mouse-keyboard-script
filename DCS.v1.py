@@ -1,6 +1,7 @@
 # Aleksi's DCS Script v1.0
 
 if starting:
+	import math
 	system.setThreadTiming(TimingTypes.HighresSystemTimer)
 	system.threadExecutionInterval = 20
 
@@ -159,8 +160,13 @@ if starting:
 			self.pressed = False
 			self.released = False
 			self.pressed_since = 0
+			self.on_down = False
+			self.on_up = False
 
 		def update(self, pressed = False):
+			self.on_down = pressed and not self.pressed
+			self.on_up = not pressed and self.pressed
+
 			if self.released:
 				self.released = False
 				# self.pressed_since = 0
@@ -172,6 +178,54 @@ if starting:
 				self.released = True
 
 			self.pressed = pressed
+
+		def on_press(self):
+			return self.on_down
+		
+		def on_release(self):
+			return self.on_up
+
+	class LayerKey:
+		def __init__(self, key, index, ignored_offsets=[0]):
+			self.key = key
+			self.index = index
+			self.ignored_offsets = ignored_offsets
+			self.active_offset = 0
+			self.was_pressed = False
+			self.on_down = False
+			self.on_up = False
+	
+		def was_layer_pressed(self, active_offset):
+			return self.was_pressed and self.active_offset == active_offset
+		
+		def on_layer_press(self, active_offset):
+			return self.on_down and self.active_offset == active_offset
+		
+		def on_layer_release(self, active_offset):
+			return self.on_up and self.active_offset == active_offset
+
+		def update(self, active_offset, freelook=False):
+			pressed = keyboard.getKeyDown(self.key) and not freelook
+			self.on_down = pressed and not self.was_pressed
+			self.on_up = not pressed and self.was_pressed
+
+			if not self.was_pressed:
+				self.active_offset = active_offset
+
+			if self.active_offset not in self.ignored_offsets:
+				vJoy[0].setButton(self.index + self.active_offset, pressed)
+
+			self.was_pressed = pressed
+
+	class VirtualKey:
+		def on_press(self):
+			pass
+
+		def on_release(self):
+			pass
+
+		def is_pressed(self):
+			pass
 
 	class DCSProfile(object):
 		def __init__(self):
@@ -204,6 +258,7 @@ if starting:
 			self.roll_linear_rate = 0.015
 			self.roll_constant_rate = 25
 			self.brakes_multiplier = 1
+			self.pedals_sensitivity = 1
 
 			# Sticky mouse 4
 			self.was_mouse5_pressed = False
@@ -211,6 +266,10 @@ if starting:
 
 			self.mouse5 = VirtualButton()
 			self.f = VirtualButton()
+
+			self.z = VirtualButton()
+			self.x = VirtualButton()
+			self.c = VirtualButton()
 
 		def setup(self):
 			# self.axis_pitch = VirtualAxis(axis_max, sensitivity=8, linear_rate=0.015, constant_rate=15)
@@ -244,6 +303,9 @@ if starting:
 
 			self.mouse5.update(pressed = (mouse.getButton(4) and not freelook))
 			self.f.update(pressed = (layer_keys[Key.F].was_layer_pressed(0) and not freelook))
+			self.z.update(pressed = keyboard.getKeyDown(Key.Z) and not freelook)
+			self.x.update(pressed = keyboard.getKeyDown(Key.X) and not freelook)
+			self.c.update(pressed = keyboard.getKeyDown(Key.C) and not freelook)
 
 			self.joystick.update(deltaX if (control_mode == 1 and not freelook) else 0, deltaY if (control_mode == 1 and not freelook) else 0, centered=((mouse.getButton(4) or control_mode == 2) and not freelook))
 
@@ -273,9 +335,25 @@ if starting:
 				elif control_mode == 2:
 					# self.axis_pitch.set_trim(0)
 					self.axis_pedal.set_trim(0 if trim_pressed else None)
-					self.axis_pedal.move(deltaX / 50)
+					self.axis_pedal.move(deltaX / 50 * self.pedals_sensitivity)
 
+				# Trims
+				if keyboard.getKeyDown(Key.LeftShift):
+					if self.z.on_press():
+						self.axis_pedal.set_trim(self.axis_pedal.value)
+					elif self.x.on_press():
+						self.joystick.axis_x.set_trim(self.joystick.axis_x.value)
+					elif self.c.on_press():
+						self.joystick.centered_axis_y.set_trim(self.joystick.value_y)
+				elif keyboard.getKeyDown(Key.LeftControl):
+					if keyboard.getKeyDown(Key.Z):
+						self.axis_pedal.set_trim(0)
+					elif keyboard.getKeyDown(Key.X):
+						self.joystick.axis_x.set_trim(0)
+					elif keyboard.getKeyDown(Key.C):
+						self.joystick.centered_axis_y.set_trim(0)
 
+				# Scroll wheel
 				if mouse.getPressed(2): # MOUSE 3
 					if self.axis_zoom.value < 6000 and self.axis_zoom.value > 2000:
 						self.axis_zoom.set_val(-11000)
@@ -288,9 +366,13 @@ if starting:
 						self.axis_zoom.move(mouse.wheel)
 
 				# throttle control
-				if layer_keys[Key.W].was_layer_pressed(0):
+				if layer_keys[Key.W].on_layer_press(0) and shift_pressed:
+					self.axis_throttle.set_val((math.ceil(round((self.axis_throttle.value + axis_max) / (axis_max * 2) * 5, 6)) - 1) * (axis_max * 2) / 5 - axis_max)
+				elif layer_keys[Key.W].was_layer_pressed(0) and not shift_pressed:
 					self.axis_throttle.move(-1)
-				if layer_keys[Key.S].was_layer_pressed(0):
+				if layer_keys[Key.S].on_layer_press(0) and shift_pressed:
+					self.axis_throttle.set_val((math.floor(round((self.axis_throttle.value + axis_max) / (axis_max * 2) * 5, 6)) + 1) * (axis_max * 2) / 5 - axis_max)
+				elif layer_keys[Key.S].was_layer_pressed(0) and not shift_pressed:
 					self.axis_throttle.move(1)
 				
 				# pedal control
@@ -362,6 +444,17 @@ if starting:
 			self.roll_sensitivity = 8
 			self.roll_linear_rate = 100
 			self.brakes_multiplier = 1
+			self.pedals_sensitivity = 1 / (45/45)
+
+	class A10CProfile(AirplaneProfile):
+		def __init__(self):
+			super(A10CProfile, self).__init__()
+			self.pitch_sensitivity = 8
+			self.pitch_linear_rate = 100
+			self.roll_sensitivity = 8
+			self.roll_linear_rate = 100
+			self.brakes_multiplier = 1
+			self.pedals_sensitivity = 1 / (80/45)
 
 	class A4ECProfile(AirplaneProfile):
 		def __init__(self):
@@ -498,28 +591,6 @@ if starting:
 			super(UH1HProfile, self).__init__()
 			self.always_trim_everything = True
 			self.pedal_sensitivity = 350
-
-	class LayerKey:
-		def __init__(self, key, index, ignored_offsets=[0]):
-			self.key = key
-			self.index = index
-			self.ignored_offsets = ignored_offsets
-			self.active_offset = 0
-			self.was_pressed = False
-	
-		def was_layer_pressed(self, active_offset):
-			return self.was_pressed and self.active_offset == active_offset
-
-		def update(self, active_offset, freelook=False):
-			pressed = keyboard.getKeyDown(self.key) and not freelook
-
-			if not self.was_pressed:
-				self.active_offset = active_offset
-
-			if self.active_offset not in self.ignored_offsets:
-				vJoy[0].setButton(self.index + self.active_offset, pressed)
-
-			self.was_pressed = pressed
 
 	profiles = dict([
 		("F-16C", F16CProfile()),
