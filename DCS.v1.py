@@ -217,15 +217,55 @@ if starting:
 
 			self.was_pressed = pressed
 
-	class VirtualKey:
-		def on_press(self):
-			pass
+	class VirtualKeys:
+		def __init__(self):
+			self.keys = [Key.__dict__[name] for name in Key.__dict__ if isinstance(Key.__dict__[name], Key)]
 
-		def on_release(self):
-			pass
+			self.held = {}			# currently down
+			self.on_down = {}		# went down this tick
+			self.on_up = {}			# went up this tick
+			self.pressed_since = {}	# tick the current press started
+			self.held_with = {}		# keys that were down at the moment of press
 
-		def is_pressed(self):
-			pass
+			for key in self.keys:
+				self.held[key] = False
+				self.on_down[key] = False
+				self.on_up[key] = False
+				self.pressed_since[key] = 0
+				self.held_with[key] = set()
+
+		def update(self, freelook=False):
+			# Read the whole keyboard once so held_with sees a consistent snapshot
+			current = {}
+			for key in self.keys:
+				current[key] = keyboard.getKeyDown(key) and not freelook
+
+			for key in self.keys:
+				down = current[key]
+				was = self.held[key]
+
+				self.on_down[key] = down and not was
+				self.on_up[key] = not down and was
+
+				if self.on_down[key]:
+					self.pressed_since[key] = tick
+					self.held_with[key] = set(other for other in self.keys if other != key and current[other])
+
+				self.held[key] = down
+
+		def has_mods(self, key, with_mods):
+			# True if every key in with_mods was already down when `key` was pressed
+			snapshot = self.held_with.get(key, set())
+			return all(mod in snapshot for mod in with_mods)
+
+		def on_press(self, key, with_mods=[]):
+			return self.on_down.get(key, False) and self.has_mods(key, with_mods)
+
+		def on_release(self, key, with_mods=[]):
+			return self.on_up.get(key, False) and self.has_mods(key, with_mods)
+
+		def is_pressed(self, key, with_mods=[]):
+			return self.held.get(key, False) and self.has_mods(key, with_mods)
 
 	class DCSProfile(object):
 		def __init__(self):
