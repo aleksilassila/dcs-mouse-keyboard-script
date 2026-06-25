@@ -185,38 +185,6 @@ if starting:
 		def on_release(self):
 			return self.on_up
 
-	class LayerKey:
-		def __init__(self, key, index, ignored_offsets=[0]):
-			self.key = key
-			self.index = index
-			self.ignored_offsets = ignored_offsets
-			self.active_offset = 0
-			self.was_pressed = False
-			self.on_down = False
-			self.on_up = False
-	
-		def was_layer_pressed(self, active_offset):
-			return self.was_pressed and self.active_offset == active_offset
-		
-		def on_layer_press(self, active_offset):
-			return self.on_down and self.active_offset == active_offset
-		
-		def on_layer_release(self, active_offset):
-			return self.on_up and self.active_offset == active_offset
-
-		def update(self, active_offset, freelook=False):
-			pressed = keyboard.getKeyDown(self.key) and not freelook
-			self.on_down = pressed and not self.was_pressed
-			self.on_up = not pressed and self.was_pressed
-
-			if not self.was_pressed:
-				self.active_offset = active_offset
-
-			if self.active_offset not in self.ignored_offsets:
-				vJoy[0].setButton(self.index + self.active_offset, pressed)
-
-			self.was_pressed = pressed
-
 	class VirtualKeys:
 		def __init__(self):
 			self.keys = [Key.__dict__[name] for name in Key.__dict__ if isinstance(Key.__dict__[name], Key)]
@@ -253,19 +221,26 @@ if starting:
 
 				self.held[key] = down
 
-		def has_mods(self, key, with_mods):
-			# True if every key in with_mods was already down when `key` was pressed
-			snapshot = self.held_with.get(key, set())
-			return all(mod in snapshot for mod in with_mods)
+		def on_press(self, key, with_mods=[], without_mods=[]):
+			held = self.held_with.get(key, set())
+			valid_with_mods = all(mod in held for mod in with_mods)
+			valid_without_mods = all(mod not in held for mod in without_mods)
 
-		def on_press(self, key, with_mods=[]):
-			return self.on_down.get(key, False) and self.has_mods(key, with_mods)
+			return self.on_down.get(key, False) and valid_with_mods and valid_without_mods
 
-		def on_release(self, key, with_mods=[]):
-			return self.on_up.get(key, False) and self.has_mods(key, with_mods)
+		def on_release(self, key, with_mods=[], without_mods=[]):
+			held = self.held_with.get(key, set())
+			valid_with_mods = all(mod in held for mod in with_mods)
+			valid_without_mods = all(mod not in held for mod in without_mods)
 
-		def is_pressed(self, key, with_mods=[]):
-			return self.held.get(key, False) and self.has_mods(key, with_mods)
+			return self.on_up.get(key, False) and valid_with_mods and valid_without_mods
+
+		def is_pressed(self, key, with_mods=[], without_mods=[]):
+			held = self.held_with.get(key, set())
+			valid_with_mods = all(mod in held for mod in with_mods)
+			valid_without_mods = all(mod not in held for mod in without_mods)
+
+			return self.held.get(key, False) and valid_with_mods and valid_without_mods
 
 	class DCSProfile(object):
 		def __init__(self):
@@ -342,7 +317,7 @@ if starting:
 			deltaY = mouse.deltaY
 
 			self.mouse5.update(pressed = (mouse.getButton(4) and not freelook))
-			self.f.update(pressed = (layer_keys[Key.F].was_layer_pressed(0) and not freelook))
+			self.f.update(pressed = (virtual_keys.is_pressed(Key.F, without_mods=mod_keys) and not freelook))
 			self.z.update(pressed = keyboard.getKeyDown(Key.Z) and not freelook)
 			self.x.update(pressed = keyboard.getKeyDown(Key.X) and not freelook)
 			self.c.update(pressed = keyboard.getKeyDown(Key.C) and not freelook)
@@ -406,29 +381,29 @@ if starting:
 						self.axis_zoom.move(mouse.wheel)
 
 				# throttle control
-				if layer_keys[Key.W].on_layer_press(0) and shift_pressed:
-					self.axis_throttle.set_val((math.ceil(round((self.axis_throttle.value + axis_max) / (axis_max * 2) * 5, 6)) - 1) * (axis_max * 2) / 5 - axis_max)
-				elif layer_keys[Key.W].was_layer_pressed(0) and not shift_pressed:
+				if virtual_keys.on_press(Key.W, without_mods=layer_triggers) and shift_pressed:
+					self.axis_throttle.set_val((math.ceil(round((self.axis_throttle.value + axis_max) / (axis_max * 2) * 4, 6)) - 1) * (axis_max * 2) / 4 - axis_max)
+				elif virtual_keys.is_pressed(Key.W, without_mods=layer_triggers) and not shift_pressed:
 					self.axis_throttle.move(-1)
-				if layer_keys[Key.S].on_layer_press(0) and shift_pressed:
-					self.axis_throttle.set_val((math.floor(round((self.axis_throttle.value + axis_max) / (axis_max * 2) * 5, 6)) + 1) * (axis_max * 2) / 5 - axis_max)
-				elif layer_keys[Key.S].was_layer_pressed(0) and not shift_pressed:
+				if virtual_keys.on_press(Key.S, without_mods=layer_triggers) and shift_pressed:
+					self.axis_throttle.set_val((math.floor(round((self.axis_throttle.value + axis_max) / (axis_max * 2) * 4, 6)) + 1) * (axis_max * 2) / 4 - axis_max)
+				elif virtual_keys.is_pressed(Key.S, without_mods=layer_triggers) and not shift_pressed:
 					self.axis_throttle.move(1)
 				
 				# pedal control
-				if layer_keys[Key.Q].was_layer_pressed(0):
+				if virtual_keys.is_pressed(Key.Q, without_mods=layer_triggers):
 					self.axis_brake_left.move(-2)
-				if layer_keys[Key.E].was_layer_pressed(0):
+				if virtual_keys.is_pressed(Key.E, without_mods=layer_triggers):
 					self.axis_brake_right.move(-2)
 				
-				if layer_keys[Key.A].was_layer_pressed(0):
+				if virtual_keys.is_pressed(Key.A, without_mods=layer_triggers):
 					if shift_pressed:
 						# self.axis_roll.offset_trim(-10)
 						self.joystick.axis_x.offset_trim(-10)
 					else:
 						self.axis_pedal.offset_trim(-self.axis_pedal.sensitivity * self.pedal_speed.value)
 						self.pedal_speed.move(1)
-				if layer_keys[Key.D].was_layer_pressed(0):
+				if virtual_keys.is_pressed(Key.D, without_mods=layer_triggers):
 					if shift_pressed:
 						# self.axis_roll.offset_trim(10)
 						self.joystick.axis_x.offset_trim(10)
@@ -454,7 +429,8 @@ if starting:
 			# vJoy[0].y = self.axis_pitch.value
 			vJoy[0].x = self.joystick.value_x
 			# vJoy[0].y = linear_map(self.joystick.value_y, 0, axis_max, axis_max / 2.5, axis_max) if self.joystick.value_y >= 0 else linear_map(self.joystick.value_y, -axis_max, 0, -axis_max, axis_max / 2.5)
-			vJoy[0].y = linear_map(self.joystick.value_y, 0, axis_max, axis_max / 1.93, axis_max) if self.joystick.value_y >= 0 else linear_map(self.joystick.value_y, -axis_max, 0, -axis_max, axis_max / 1.93)
+			# vJoy[0].y = linear_map(self.joystick.value_y, 0, axis_max, axis_max / 1.93, axis_max) if self.joystick.value_y >= 0 else linear_map(self.joystick.value_y, -axis_max, 0, -axis_max, axis_max / 1.93) # A-10C
+			vJoy[0].y = self.joystick.value_y
 			vJoy[0].z = self.axis_throttle.value
 			vJoy[0].rx = self.axis_brake_left.value
 			vJoy[0].ry = self.axis_brake_right.value
@@ -485,6 +461,8 @@ if starting:
 			self.roll_linear_rate = 100
 			self.brakes_multiplier = 1
 			self.pedals_sensitivity = 1 / (45/45)
+
+			# Afterburner Z = -8429 = 24.273% / 75.726%
 
 	class A10CProfile(AirplaneProfile):
 		def __init__(self):
@@ -645,31 +623,48 @@ if starting:
 
 	active_profile = None
 
-	layer_keys = {
-		Key.W: LayerKey(Key.W, 0),
-		Key.S: LayerKey(Key.S, 1),
-		Key.A: LayerKey(Key.A, 2),
-		Key.D: LayerKey(Key.D, 3),
-		Key.Q: LayerKey(Key.Q, 4),
-		Key.E: LayerKey(Key.E, 5),
-		Key.F: LayerKey(Key.F, 6),
-		Key.R: LayerKey(Key.R, 7),
-		# Key.G: LayerKey(Key.G, 8),
-		# Key.T: LayerKey(Key.T, 9),
-		Key.D1: LayerKey(Key.D1, 10, ignored_offsets=[]),
-		Key.D2: LayerKey(Key.D2, 11, ignored_offsets=[]),
-		Key.D3: LayerKey(Key.D3, 12, ignored_offsets=[]),
-		Key.D4: LayerKey(Key.D4, 13, ignored_offsets=[]),
-		Key.D5: LayerKey(Key.D5, 14, ignored_offsets=[40, 60, 80, 100]),
-		Key.D6: LayerKey(Key.D6, 15, ignored_offsets=[40, 60, 80, 100]),
-		Key.D7: LayerKey(Key.D7, 16, ignored_offsets=[40, 60, 80, 100]),
-		Key.D8: LayerKey(Key.D8, 17, ignored_offsets=[40, 60, 80, 100]),
-		Key.D9: LayerKey(Key.D9, 18, ignored_offsets=[40, 60, 80, 100]),
-		Key.D0: LayerKey(Key.D0, 19, ignored_offsets=[40, 60, 80, 100]),
-	}
+	virtual_keys = VirtualKeys()
+
+	mod_keys = [
+		Key.Z,
+		Key.X,
+		Key.C,
+		Key.V,
+		Key.LeftShift,
+		Key.RightShift,
+	]
+
+	layer_triggers = [
+		Key.Z,
+		Key.X,
+		Key.C,
+		Key.V
+	]
+
+	layer_keys = [
+		(Key.W, 0),
+		(Key.S, 1),
+		(Key.A, 2),
+		(Key.D, 3),
+		(Key.Q, 4),
+		(Key.E, 5),
+		(Key.F, 6),
+		(Key.R, 7),
+		# (Key.G, 8),
+		# (Key.T, 9),
+		(Key.D1, 10),
+		(Key.D2, 11),
+		(Key.D3, 12),
+		(Key.D4, 13),
+		(Key.D5, 14),
+		(Key.D6, 15),
+		(Key.D7, 16),	
+		(Key.D8, 17),
+		(Key.D9, 18),
+		(Key.D0, 19)
+	]
 
 	active_layer_offset = 0
-
 
 # Alt
 alt_pressed = keyboard.getKeyDown(Key.LeftAlt) or keyboard.getKeyDown(Key.RightAlt)
@@ -726,23 +721,23 @@ if k_toggle:
 			k_toggle = False
 			break
 
-# Keyboard layers
-if not k_toggle and not freelook:
-	if keyboard.getKeyDown(Key.Z):
-		active_layer_offset = 40
-	elif keyboard.getKeyDown(Key.X):
-		active_layer_offset = 60
-	elif keyboard.getKeyDown(Key.C):
-		active_layer_offset = 80
-	elif keyboard.getKeyDown(Key.V):
-		active_layer_offset = 100
-	else:
-		active_layer_offset = 0
-else:
-	active_layer_offset = 0
+virtual_keys.update(freelook=(freelook or k_toggle))
 
-for layer_key in layer_keys.values():
-	layer_key.update(active_layer_offset, freelook=(freelook or k_toggle))
+# Layers
+for (key, offset) in layer_keys:
+	vJoy[0].setButton(0 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, without_mods=mod_keys))
+
+for (key, offset) in layer_keys:
+	vJoy[0].setButton(40 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, with_mods=[Key.Z], without_mods=[Key.X, Key.C, Key.V]))
+
+for (key, offset) in layer_keys:
+	vJoy[0].setButton(60 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, with_mods=[Key.X], without_mods=[Key.Z, Key.C, Key.V]))
+
+for (key, offset) in layer_keys:
+	vJoy[0].setButton(80 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, with_mods=[Key.C], without_mods=[Key.Z, Key.X, Key.V]))
+
+for (key, offset) in layer_keys:
+	vJoy[0].setButton(100 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, with_mods=[Key.V], without_mods=[Key.Z, Key.X, Key.C]))
 
 if active_profile is not None:
 	active_profile.update(freelook=freelook, alt_pressed=alt_pressed, shift_pressed=shift_pressed, control_layer=control_layer, control_mode=control_mode, active_layer_offset=active_layer_offset)
