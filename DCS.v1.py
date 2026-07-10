@@ -322,7 +322,7 @@ if starting:
 			self.x.update(pressed = keyboard.getKeyDown(Key.X) and not freelook)
 			self.c.update(pressed = keyboard.getKeyDown(Key.C) and not freelook)
 
-			self.joystick.update(deltaX if (control_mode == 1 and not freelook) else 0, deltaY if (control_mode == 1 and not freelook) else 0, centered=((mouse.getButton(4) or control_mode == 2) and not freelook))
+			self.joystick.update(deltaX if (control_mode == 1 and not freelook) else 0, deltaY if (control_mode == 1 and not freelook) else 0, centered=(mouse.getButton(4) or (control_mode == 2 and not freelook)))
 
 			if not freelook:
 				# trim_pressed = tick < self.mouse5.pressed_since + 50 or self.mouse5.pressed # 1000ms after release
@@ -632,6 +632,8 @@ if starting:
 		Key.V,
 		Key.LeftShift,
 		Key.RightShift,
+		Key.LeftControl,
+		Key.RightControl,
 	]
 
 	layer_triggers = [
@@ -741,6 +743,10 @@ for (key, offset) in layer_keys:
 
 if active_profile is not None:
 	active_profile.update(freelook=freelook, alt_pressed=alt_pressed, shift_pressed=shift_pressed, control_layer=control_layer, control_mode=control_mode, active_layer_offset=active_layer_offset)
+
+if not freelook and not k_toggle:
+	vJoy[0].setButton(20, mouse.getButton(0)) # MOUSE 1
+	vJoy[0].setButton(21, mouse.getButton(1)) # MOUSE 2
 
 diagnostics.watch(k_toggle)
 diagnostics.watch(freelook)
