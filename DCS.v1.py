@@ -246,6 +246,12 @@ if starting:
 		def __init__(self):
 			self.axis = []
 
+			self.zoom_min = -axis_max
+			self.zoom_max = 11000
+			
+			self.zoom_1 = 0.652607
+			self.zoom_2 = 0.164266
+
 		def post_update(self):
 			for axis in self.axis:
 				axis.post_update()
@@ -266,6 +272,7 @@ if starting:
 
 	class AirplaneProfile(DCSProfile):
 		def __init__(self):
+			super(AirplaneProfile, self).__init__()
 			self.pitch_sensitivity = 8
 			self.pitch_linear_rate = 0.015
 			self.pitch_constant_rate = 25
@@ -297,13 +304,13 @@ if starting:
 			self.axis_throttle = VirtualAxis(axis_max, sensitivity=200)
 			self.axis_throttle.set_val(axis_max)
 			
-			self.axis_brake_left = VirtualAxis(axis_max, sensitivity=600, constant_rate=600)
-			self.axis_brake_left.set_val(axis_max)
-			self.axis_brake_left.set_trim(axis_max)
+			self.axis_brake_left = VirtualAxis(axis_max, sensitivity=1000, constant_rate=1000)
+			self.axis_brake_left.set_val(-axis_max)
+			self.axis_brake_left.set_trim(-axis_max)
 			
-			self.axis_brake_right = VirtualAxis(axis_max, sensitivity=600, constant_rate=600)
-			self.axis_brake_right.set_val(axis_max)
-			self.axis_brake_right.set_trim(axis_max)
+			self.axis_brake_right = VirtualAxis(axis_max, sensitivity=1000, constant_rate=1000)
+			self.axis_brake_right.set_val(-axis_max)
+			self.axis_brake_right.set_trim(-axis_max)
 
 			self.axis_zoom = VirtualAxis(axis_max, sensitivity=-20)
 			self.axis_zoom_out = VirtualAxis(axis_max, constant_rate=400, linear_rate=0.5, trim_value=self.axis_zoom.value)
@@ -370,10 +377,16 @@ if starting:
 
 				# Scroll wheel
 				if mouse.getPressed(2): # MOUSE 3
-					if self.axis_zoom.value < 6000 and self.axis_zoom.value > 2000:
-						self.axis_zoom.set_val(-11000)
+					zoom_1_slider = 2 * axis_max * self.zoom_1 - axis_max
+					zoom_2_slider = 2 * axis_max * self.zoom_2 - axis_max
+					if self.axis_zoom.value < zoom_1_slider + 1000 and self.axis_zoom.value > zoom_1_slider - 3000:
+						self.axis_zoom.set_val(zoom_2_slider) # -11000
 					else:
-						self.axis_zoom.set_val(5000)
+						self.axis_zoom.set_val(zoom_1_slider) # 5000
+						# 2*axis_max * x - axis_max = 5000
+						# 2*axis_max * x = 5000 + axis_max
+						# x = (5000 + axis_max) / (2*axis_max)
+						# X = (5000 + 16382) / (2*16382) = 0.652607
 				elif mouse.wheel != 0:
 					if keyboard.getKeyDown(Key.LeftShift):
 						self.axis_manual_zoom.move(mouse.wheel)
@@ -392,9 +405,12 @@ if starting:
 				
 				# pedal control
 				if virtual_keys.is_pressed(Key.Q, without_mods=layer_triggers):
-					self.axis_brake_left.move(-2)
+					self.axis_brake_left.move(2)
 				if virtual_keys.is_pressed(Key.E, without_mods=layer_triggers):
-					self.axis_brake_right.move(-2)
+					self.axis_brake_right.move(2)
+				if virtual_keys.is_pressed(Key.B, without_mods=mod_keys):
+					self.axis_brake_left.move(4)
+					self.axis_brake_right.move(4)
 				
 				if virtual_keys.is_pressed(Key.A, without_mods=layer_triggers):
 					if shift_pressed:
@@ -435,7 +451,7 @@ if starting:
 			vJoy[0].rx = self.axis_brake_left.value
 			vJoy[0].ry = self.axis_brake_right.value
 			vJoy[0].rz = self.axis_pedal.value
-			vJoy[0].slider = linear_map(self.axis_zoom_out.value, -axis_max, axis_max, -axis_max, 11000)
+			vJoy[0].slider = linear_map(self.axis_zoom_out.value, -axis_max, axis_max, self.zoom_min, self.zoom_max)
 			#vJoy[0].slider = self.axis_zoom_out.value
 			vJoy[1].slider = self.axis_manual_zoom.value
 			# vJoy[0].setButton(29, self.axis_manual_zoom.increment)
@@ -445,6 +461,7 @@ if starting:
 			# diagnostics.watch(self.axis_manual_zoom.increment)
 			# diagnostics.watch(self.axis_manual_zoom.decrement)
 
+			diagnostics.watch(self.axis_zoom_out.value)
 			diagnostics.watch(vJoy[0].slider)
 			# diagnostics.watch(self.axis_pitch.value)
 			# diagnostics.watch(self.axis_pitch.trim_value)
@@ -463,6 +480,35 @@ if starting:
 			self.pedals_sensitivity = 1 / (45/45)
 
 			# Afterburner Z = -8429 = 24.273% / 75.726%
+	
+	class F16CBMSProfile(F16CProfile):
+		def __init__(self):
+			super(F16CBMSProfile, self).__init__()
+			self.exit = False
+			self.release = False
+
+			self.zoom_min = -12500
+			self.zoom_max = axis_max
+
+			self.zoom_1 = 0.5
+			self.zoom_2 = 0.12
+
+			# max: -11582 or -12500
+			# zoom: -9182
+		def update(self, freelook=False, control_layer=False, alt_pressed=False, shift_pressed=False, control_mode=1, active_layer_offset=0):
+			super(F16CBMSProfile, self).update(freelook=freelook, control_layer=control_layer, alt_pressed=alt_pressed, shift_pressed=shift_pressed, control_mode=control_mode, active_layer_offset=active_layer_offset)
+
+			if self.release:
+				vJoy[0].setButton(87, False)
+
+			# Afterburner
+			if virtual_keys.on_press(Key.E, with_mods=[Key.C], without_mods=[Key.Z, Key.X, Key.V]) or virtual_keys.on_press(Key.Q, with_mods=[Key.C], without_mods=[Key.Z, Key.X, Key.V]):
+				self.exit = not self.exit
+				if not self.exit:
+					vJoy[0].setButton(87, True)
+					self.release = True
+
+
 
 	class A10CProfile(AirplaneProfile):
 		def __init__(self):
@@ -612,6 +658,7 @@ if starting:
 
 	profiles = dict([
 		("F-16C", F16CProfile()),
+		("F-16C-BMS", F16CBMSProfile()),
 		("A-4E-C", A4ECProfile()),
 		("UH-60L", UH60Profile()),
 		("OH-6A", OH6AProfile()),
@@ -683,7 +730,7 @@ elif keyboard.getPressed(Key.Grave):
 	else:
 		control_mode = 1
 	freelook_toggle = False
-elif keyboard.getPressed(Key.R) and not freelook_toggle:
+elif virtual_keys.is_pressed(Key.R, without_mods=mod_keys) and not freelook_toggle:
 	control_mode = 2
 
 control_layer = not keyboard.getKeyDown(Key.Z) and not keyboard.getKeyDown(Key.X) and not keyboard.getKeyDown(Key.C) and not keyboard.getKeyDown(Key.V)
@@ -709,6 +756,9 @@ if k_toggle:
 
 	if keyboard.getKeyDown(Key.D5):
 		active_profile = profiles["F-16C"]
+
+	if keyboard.getKeyDown(Key.D6):
+		active_profile = profiles["F-16C-BMS"]
 
 	# Match any keypress
 	for key in Key.__dict__:
@@ -744,9 +794,11 @@ for (key, offset) in layer_keys:
 if active_profile is not None:
 	active_profile.update(freelook=freelook, alt_pressed=alt_pressed, shift_pressed=shift_pressed, control_layer=control_layer, control_mode=control_mode, active_layer_offset=active_layer_offset)
 
+# Keys to additional joystick buttons. Falcon BMS doesn't allow binding mouse, DCS has overlapping hardcoded space bar bindings
 if not freelook and not k_toggle:
 	vJoy[0].setButton(20, mouse.getButton(0)) # MOUSE 1
 	vJoy[0].setButton(21, mouse.getButton(1)) # MOUSE 2
+	vJoy[0].setButton(22, keyboard.getKeyDown(Key.Space)) # SPACE
 
 diagnostics.watch(k_toggle)
 diagnostics.watch(freelook)
