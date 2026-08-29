@@ -8,6 +8,7 @@ if starting:
 	tick = 0
 
 	freelook_toggle = True
+	mouse4_pending_29 = False
 	control_mode = 1
 	axis_max = float(vJoy[0].axisMax)
 
@@ -728,12 +729,13 @@ if starting:
 
 # Alt
 alt_pressed = keyboard.getKeyDown(Key.LeftAlt) or keyboard.getKeyDown(Key.RightAlt)
+
 shift_pressed = keyboard.getKeyDown(Key.LeftShift) or keyboard.getKeyDown(Key.RightShift)
 
 # Freelook / Control mode toggle
 if mouse.getPressed(3):
 	if not freelook_toggle:
-		vJoy[0].setPressed(29)
+		mouse4_pending_29 = True
 	freelook_toggle = True
 elif keyboard.getPressed(Key.Grave):
 	if freelook_toggle:
@@ -741,8 +743,14 @@ elif keyboard.getPressed(Key.Grave):
 	else:
 		control_mode = 1
 	freelook_toggle = False
+	mouse4_pending_29 = False
 elif virtual_keys.is_pressed(Key.R, without_mods=mod_keys) and not freelook_toggle:
 	control_mode = 2
+
+# vJoy 29 will fire when entering free look, but delay until mouse is released
+if mouse4_pending_29 and not mouse.getButton(3):
+	vJoy[0].setPressed(29)
+	mouse4_pending_29 = False
 
 control_layer = not keyboard.getKeyDown(Key.Z) and not keyboard.getKeyDown(Key.X) and not keyboard.getKeyDown(Key.C) and not keyboard.getKeyDown(Key.V)
 freelook = alt_pressed or freelook_toggle
