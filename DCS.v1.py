@@ -312,12 +312,17 @@ if starting:
 			self.axis_brake_right.set_val(-axis_max)
 			self.axis_brake_right.set_trim(-axis_max)
 
+			# self.axis_mouse_brake = VirtualAxis(axis_max, sensitivity=15, constant_rate=50, linear_rate=0.02)
+			self.axis_mouse_brake = VirtualAxis(axis_max, sensitivity=15)
+			self.axis_mouse_brake.set_val(-axis_max)
+			self.axis_mouse_brake.set_trim(-axis_max)
+
 			self.axis_zoom = VirtualAxis(axis_max, sensitivity=-20)
 			self.axis_zoom_out = VirtualAxis(axis_max, constant_rate=400, linear_rate=0.5, trim_value=self.axis_zoom.value)
 			# self.axis_manual_zoom = VirtualButtonAxis(decay=20, max_val=1000)
 			self.axis_manual_zoom = VirtualAxis(axis_max, sensitivity=20)
 			
-			self.axis = [self.joystick, self.pedal_speed, self.axis_pedal, self.axis_throttle, self.axis_brake_left, self.axis_brake_right, self.axis_zoom, self.axis_zoom_out, self.axis_manual_zoom]
+			self.axis = [self.joystick, self.pedal_speed, self.axis_pedal, self.axis_throttle, self.axis_brake_left, self.axis_brake_right, self.axis_mouse_brake, self.axis_zoom, self.axis_zoom_out, self.axis_manual_zoom]
 
 		def update(self, freelook=False, control_layer=False, alt_pressed=False, shift_pressed=False, control_mode=1, active_layer_offset=0):
 			deltaX = mouse.deltaX
@@ -357,7 +362,14 @@ if starting:
 				elif control_mode == 2:
 					# self.axis_pitch.set_trim(0)
 					self.axis_pedal.set_trim(0 if trim_pressed else None)
-					self.axis_pedal.move(deltaX / 50 * self.pedals_sensitivity)
+					cos_multiplier = max(0.1, math.cos(math.radians(self.axis_pedal.value / axis_max * 90)))
+					self.axis_pedal.move(deltaX * cos_multiplier / 50 * self.pedals_sensitivity)
+
+					# brake = max(0, (deltaY - 5) / 10)
+					# self.axis_brake_left.move(brake)
+					# self.axis_brake_right.move(brake)
+
+					self.axis_mouse_brake.move(deltaY * self.brakes_multiplier)
 
 				# Trims
 				if keyboard.getKeyDown(Key.LeftShift):
@@ -448,8 +460,8 @@ if starting:
 			# vJoy[0].y = linear_map(self.joystick.value_y, 0, axis_max, axis_max / 1.93, axis_max) if self.joystick.value_y >= 0 else linear_map(self.joystick.value_y, -axis_max, 0, -axis_max, axis_max / 1.93) # A-10C
 			vJoy[0].y = self.joystick.value_y
 			vJoy[0].z = self.axis_throttle.value
-			vJoy[0].rx = self.axis_brake_left.value
-			vJoy[0].ry = self.axis_brake_right.value
+			vJoy[0].rx = max(self.axis_brake_left.value, self.axis_mouse_brake.value)
+			vJoy[0].ry = max(self.axis_brake_right.value, self.axis_mouse_brake.value)
 			vJoy[0].rz = self.axis_pedal.value
 			vJoy[0].slider = linear_map(self.axis_zoom_out.value, -axis_max, axis_max, self.zoom_min, self.zoom_max)
 			#vJoy[0].slider = self.axis_zoom_out.value
