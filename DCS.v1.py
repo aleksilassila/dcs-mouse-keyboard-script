@@ -8,7 +8,6 @@ if starting:
 	tick = 0
 
 	freelook_toggle = True
-	k_toggle = False
 	control_mode = 1
 	axis_max = float(vJoy[0].axisMax)
 
@@ -680,7 +679,7 @@ if starting:
 	for profile in profiles.values():
 		profile.setup()
 
-	active_profile = None
+	active_profile = profiles["F-16C"]
 
 	virtual_keys = VirtualKeys()
 
@@ -748,16 +747,12 @@ elif virtual_keys.is_pressed(Key.R, without_mods=mod_keys) and not freelook_togg
 control_layer = not keyboard.getKeyDown(Key.Z) and not keyboard.getKeyDown(Key.X) and not keyboard.getKeyDown(Key.C) and not keyboard.getKeyDown(Key.V)
 freelook = alt_pressed or freelook_toggle
 
-# K Toggle
-if keyboard.getPressed(Key.K):
-	k_toggle = not k_toggle
-
-if k_toggle:
-	# K Binds
+# Profile selection: hold Mouse 4 + number key
+if mouse.getButton(3):
 	if keyboard.getKeyDown(Key.D1):
 		active_profile = profiles["UH-60L"]
 
-	if keyboard.getPressed(Key.D2):
+	if keyboard.getKeyDown(Key.D2):
 		active_profile = profiles["OH-6A"]
 
 	if keyboard.getKeyDown(Key.D3):
@@ -772,47 +767,33 @@ if k_toggle:
 	if keyboard.getKeyDown(Key.D6):
 		active_profile = profiles["F-16C-BMS"]
 
-	# Match any keypress
-	for key in Key.__dict__:
-		#diagnostics.debug(key)
-		#diagnostics.debug(isinstance(Key.__dict__[key], Key))
-		
-		if not isinstance(Key.__dict__[key], Key):
-			continue
-
-		if keyboard.getPressed(Key.__dict__[key]):
-			diagnostics.debug(Key.__dict__[key])
-			k_toggle = False
-			break
-
-virtual_keys.update(freelook=(freelook or k_toggle))
+virtual_keys.update(freelook=freelook)
 
 # Layers
 for (key, offset) in layer_keys:
-	vJoy[0].setButton(0 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, without_mods=mod_keys))
+	vJoy[0].setButton(0 + offset, not freelook and virtual_keys.is_pressed(key, without_mods=mod_keys))
 
 for (key, offset) in layer_keys:
-	vJoy[0].setButton(40 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, with_mods=[Key.Z], without_mods=[Key.X, Key.C, Key.V]))
+	vJoy[0].setButton(40 + offset, not freelook and virtual_keys.is_pressed(key, with_mods=[Key.Z], without_mods=[Key.X, Key.C, Key.V]))
 
 for (key, offset) in layer_keys:
-	vJoy[0].setButton(60 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, with_mods=[Key.X], without_mods=[Key.Z, Key.C, Key.V]))
+	vJoy[0].setButton(60 + offset, not freelook and virtual_keys.is_pressed(key, with_mods=[Key.X], without_mods=[Key.Z, Key.C, Key.V]))
 
 for (key, offset) in layer_keys:
-	vJoy[0].setButton(80 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, with_mods=[Key.C], without_mods=[Key.Z, Key.X, Key.V]))
+	vJoy[0].setButton(80 + offset, not freelook and virtual_keys.is_pressed(key, with_mods=[Key.C], without_mods=[Key.Z, Key.X, Key.V]))
 
 for (key, offset) in layer_keys:
-	vJoy[0].setButton(100 + offset, not (freelook or k_toggle) and virtual_keys.is_pressed(key, with_mods=[Key.V], without_mods=[Key.Z, Key.X, Key.C]))
+	vJoy[0].setButton(100 + offset, not freelook and virtual_keys.is_pressed(key, with_mods=[Key.V], without_mods=[Key.Z, Key.X, Key.C]))
 
 if active_profile is not None:
 	active_profile.update(freelook=freelook, alt_pressed=alt_pressed, shift_pressed=shift_pressed, control_layer=control_layer, control_mode=control_mode, active_layer_offset=active_layer_offset)
 
 # Keys to additional joystick buttons. Falcon BMS doesn't allow binding mouse, DCS has overlapping hardcoded space bar bindings
-if not freelook and not k_toggle:
+if not freelook:
 	vJoy[0].setButton(20, mouse.getButton(0)) # MOUSE 1
 	vJoy[0].setButton(21, mouse.getButton(1)) # MOUSE 2
 	vJoy[0].setButton(22, keyboard.getKeyDown(Key.Space)) # SPACE
 
-diagnostics.watch(k_toggle)
 diagnostics.watch(freelook)
 diagnostics.watch(control_layer)
 diagnostics.watch(active_profile.__class__.__name__ if active_profile else None)
