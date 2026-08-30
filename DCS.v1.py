@@ -1,5 +1,7 @@
 # Aleksi's DCS Script v1.0
 
+ZOOM_IN_FREELOOK = False
+
 if starting:
 	import math
 	system.setThreadTiming(TimingTypes.HighresSystemTimer)
@@ -387,24 +389,6 @@ if starting:
 					elif keyboard.getKeyDown(Key.C):
 						self.joystick.centered_axis_y.set_trim(0)
 
-				# Scroll wheel
-				if mouse.getPressed(2): # MOUSE 3
-					zoom_1_slider = 2 * axis_max * self.zoom_1 - axis_max
-					zoom_2_slider = 2 * axis_max * self.zoom_2 - axis_max
-					if self.axis_zoom.value < zoom_1_slider + 1000 and self.axis_zoom.value > zoom_1_slider - 3000:
-						self.axis_zoom.set_val(zoom_2_slider) # -11000
-					else:
-						self.axis_zoom.set_val(zoom_1_slider) # 5000
-						# 2*axis_max * x - axis_max = 5000
-						# 2*axis_max * x = 5000 + axis_max
-						# x = (5000 + axis_max) / (2*axis_max)
-						# X = (5000 + 16382) / (2*16382) = 0.652607
-				elif mouse.wheel != 0:
-					if keyboard.getKeyDown(Key.LeftShift):
-						self.axis_manual_zoom.move(mouse.wheel)
-					else:
-						self.axis_zoom.move(mouse.wheel)
-
 				# throttle control
 				if virtual_keys.on_press(Key.W, without_mods=layer_triggers) and shift_pressed:
 					self.axis_throttle.set_val((math.ceil(round((self.axis_throttle.value + axis_max) / (axis_max * 2) * 4, 6)) - 1) * (axis_max * 2) / 4 - axis_max)
@@ -449,6 +433,25 @@ if starting:
 				# 		self.axis_roll.set_trim(0)
 				# 	else:
 				# 		self.axis_pedal.set_trim(0)
+
+			# Scroll wheel
+			if not freelook or ZOOM_IN_FREELOOK:
+				if mouse.getPressed(2): # MOUSE 3
+					zoom_1_slider = 2 * axis_max * self.zoom_1 - axis_max
+					zoom_2_slider = 2 * axis_max * self.zoom_2 - axis_max
+					if self.axis_zoom.value < zoom_1_slider + 1000 and self.axis_zoom.value > zoom_1_slider - 3000:
+						self.axis_zoom.set_val(zoom_2_slider) # -11000
+					else:
+						self.axis_zoom.set_val(zoom_1_slider) # 5000
+						# 2*axis_max * x - axis_max = 5000
+						# 2*axis_max * x = 5000 + axis_max
+						# x = (5000 + axis_max) / (2*axis_max)
+						# X = (5000 + 16382) / (2*16382) = 0.652607
+				elif mouse.wheel != 0:
+					if keyboard.getKeyDown(Key.LeftShift):
+						self.axis_manual_zoom.move(mouse.wheel)
+					else:
+						self.axis_zoom.move(mouse.wheel)
 
 			self.axis_zoom_out.trim_value = self.axis_zoom.value
 
